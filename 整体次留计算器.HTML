@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>整体次留计算器</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f7fa;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .container {
+    width: 100%;
+    max-width: 640px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    padding: 32px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .result-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 28px;
+    text-align: center;
+  }
+  .result-label {
+    font-size: 14px;
+    opacity: 0.9;
+    margin-bottom: 8px;
+  }
+  .result-value {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .result-detail {
+    margin-top: 12px;
+    font-size: 13px;
+    opacity: 0.85;
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+  }
+  .header-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 40px;
+    gap: 12px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 500;
+    padding: 0 4px;
+  }
+  .row-list {
+    margin-bottom: 16px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 40px;
+    gap: 12px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+  .row input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .row input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+  }
+  .del-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #fee2e2;
+    color: #dc2626;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: end;
+  }
+  .del-btn:hover { background: #fecaca; }
+  .actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn-primary {
+    background: #667eea;
+    color: #fff;
+  }
+  .btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+  }
+  .btn:hover { opacity: 0.9; }
+  .tip {
+    margin-top: 18px;
+    font-size: 12px;
+    color: #9ca3af;
+    text-align: center;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>整体次留率计算器</h1>
+
+  <div class="result-card">
+    <div class="result-label">整体次留率</div>
+    <div class="result-value" id="totalRate">0.00%</div>
+    <div class="result-detail">
+      <span>总激活：<b id="totalActive">0</b></span>
+      <span>总次留：<b id="totalRetain">0</b></span>
+    </div>
+  </div>
+
+  <div class="header-row">
+    <span>激活数</span>
+    <span>次留率 (%)</span>
+    <span></span>
+  </div>
+
+  <div class="row-list" id="rowList"></div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="addRow()">+ 添加一组</button>
+    <button class="btn btn-secondary" onclick="clearAll()">清空全部</button>
+  </div>
+
+  <div class="tip">
+    计算公式：整体次留率 = 各组(激活数 × 次留率)之和 ÷ 总激活数<br>
+    支持直接从表格复制整行粘贴到激活数框，自动拆分填充；支持一次性粘贴多行
+  </div>
+</div>
+
+<script>
+  const rowList = document.getElementById('rowList');
+  const totalRateEl = document.getElementById('totalRate');
+  const totalActiveEl = document.getElementById('totalActive');
+  const totalRetainEl = document.getElementById('totalRetain');
+  let rowId = 0;
+
+  // 粘贴处理：自动拆分激活数和次留率，支持多行粘贴
+  function handlePaste(e, inputEl) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    // 按换行拆分多行，过滤空行
+    const lines = text.split('\n').filter(line => line.trim() !== '');
+    if (lines.length === 0) return;
+
+    const currentRow = inputEl.closest('.row');
+
+    lines.forEach((line, index) => {
+      // 按制表符/多个空格拆分字段
+      const parts = line.trim().split(/\s+/);
+      let active = '';
+      let rate = '';
+
+      if (parts.length >= 1) {
+        // 激活数：去除千分位逗号
+        active = parts[0].replace(/,/g, '');
+      }
+      if (parts.length >= 2) {
+        // 次留率：去除百分号和千分位逗号
+        rate = parts[1].replace(/%/g, '').replace(/,/g, '');
+      }
+
+      if (index === 0) {
+        // 填充当前行
+        currentRow.querySelector('.input-active').value = active;
+        currentRow.querySelector('.input-rate').value = rate;
+      } else {
+        // 新增行并填充
+        addRow(active, rate);
+      }
+    });
+
+    calc();
+  }
+
+  function addRow(active = '', rate = '') {
+    rowId++;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.id = rowId;
+    row.innerHTML = `
+      <input type="number" class="input-active" placeholder="可直接粘贴整行数据" value="${active}" oninput="calc()" onpaste="handlePaste(event, this)">
+      <input type="number" class="input-rate" placeholder="例如：35.2" value="${rate}" step="0.01" oninput="calc()">
+      <button class="del-btn" onclick="removeRow(this)" title="删除">×</button>
+    `;
+    rowList.appendChild(row);
+    calc();
+  }
+
+  function removeRow(btn) {
+    btn.closest('.row').remove();
+    calc();
+  }
+
+  function clearAll() {
+    rowList.innerHTML = '';
+    addRow();
+    addRow();
+    addRow();
+  }
+
+  function calc() {
+    let totalActive = 0;
+    let totalRetain = 0;
+    const rows = rowList.querySelectorAll('.row');
+
+    rows.forEach(row => {
+      const active = parseFloat(row.querySelector('.input-active').value) || 0;
+      const rate = parseFloat(row.querySelector('.input-rate').value) || 0;
+      totalActive += active;
+      totalRetain += active * (rate / 100);
+    });
+
+    const overallRate = totalActive > 0 ? (totalRetain / totalActive) * 100 : 0;
+
+    totalRateEl.textContent = overallRate.toFixed(2) + '%';
+    totalActiveEl.textContent = Math.round(totalActive).toLocaleString();
+    totalRetainEl.textContent = totalRetain.toFixed(2);
+  }
+
+  // 默认初始化 3 行
+  addRow();
+  addRow();
+  addRow();
+</script>
+</body>
+</html>
